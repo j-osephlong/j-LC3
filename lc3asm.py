@@ -41,9 +41,11 @@ def blkwPsOp (instruct):
 
 def stringzOp (instruct):
     global pc
-    for c in instruct[1][1:-1]:
+    print(instruct)
+    for c in instruct[1:-1]:
         out[pc] = ord(c)
         pc+=1
+    
     out[pc] = 0
     pc+=1
 
@@ -263,7 +265,10 @@ def firstPass():
                     continue
                 return -1
             else:
-                psuedo_ops[instruct[0].lower()](instruct)
+                if instruct[0].lower() == '.stringz':
+                    psuedo_ops[instruct[0].lower()]('"'+l.partition(';')[0].partition('"')[2].rstrip())
+                else:
+                    psuedo_ops[instruct[0].lower()](instruct)
         else:
             pc+=1 
 
@@ -302,7 +307,10 @@ def secondPass():
                 print("Invalid operands " + l + " at " + str(hex(pc)))
                 return -1
             else:
-                psuedo_ops[instruct[0].lower()](instruct)
+                if instruct[0].lower() == '.stringz':
+                    psuedo_ops[instruct[0].lower()]('"'+l.partition(';')[0].partition('"')[2].rstrip())
+                else:
+                    psuedo_ops[instruct[0].lower()](instruct)
         else:
             pc+=1 
             out[pc-1] = op_codes[instruct[0].lower()](instruct)

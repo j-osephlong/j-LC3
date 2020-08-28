@@ -532,7 +532,7 @@ OS_START:
     ; loader would set the PC
     STI R0, OS_PSR
     HALT
-OS_START_MSG:    .STRINGZ "HI"
+OS_START_MSG:    .STRINGZ "HI\n"
 OS_KBSR:    .FILL xFE00
 OS_KBDR:   .FILL xFE02
 OS_DSR:     .FILL xFE04

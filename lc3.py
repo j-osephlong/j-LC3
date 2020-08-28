@@ -9,8 +9,8 @@ memory = np.uint16([0]*0xFFFF)
 #registers
 reg = np.uint16([0]*8)
 pc = np.int16(0x0200)
-psr = np.uint16(0)
-run = True
+psr = 0xFFFC
+halt = True
 #special memory ptrs
 kbsr_ptr = 0xFE00
 kbdr_ptr = 0xFE02
@@ -25,23 +25,22 @@ def sign_extend(value, bits):
     return (value & (sign_bit - 1)) - (value & sign_bit)
 
 def logSign(num):
-    global psr
     n = sign_extend(num, 16)
-    psr&=0b1111111111111000
+    memory[psr]&=0b1111111111111000
 
     if n == 0:
-        psr|=0b10
+        memory[psr]|=0b10
     elif n < 0:
-        psr|=0b100
+        memory[psr]|=0b100
     elif n > 0:
-        psr|=0b1
+        memory[psr]|=0b1
 
 def getSign():
-    if (psr&0b100)>>2 == 0b1:
+    if (memory[psr]&0b100)>>2 == 0b1:
         return -1
-    elif (psr&0b10)>>1 == 0b1:
+    elif (memory[psr]&0b10)>>1 == 0b1:
         return 0
-    elif psr&0b1 == 0b1:
+    elif memory[psr]&0b1 == 0b1:
         return 1
 
 def addOp(instruct):
@@ -63,6 +62,7 @@ def andOp(instruct):
     reg[(instruct>>9)&0b111] = ans
 
 def brOp(instruct):
+    global pc
     if (instruct >> 11) & 0b1 == 0b1 and getSign() == -1:
         pc+=sign_extend(instruct&0b111111111, 9)
         return
@@ -127,16 +127,19 @@ def strOp(instruct):
     memory[sign_extend(instruct&0b111111, 6) + reg[(instruct>>6)&0b111]] = reg[(instruct>>9)&0b111]
 
 def trapOp(instruct):
-    global run
+    global halt
     if instruct&0b11111111 == 0x21:
         print(chr(reg[0]), end='')
     if instruct&0b11111111 == 0x25:
-        run = False
+        halt = True
     if instruct&0b11111111 == 0x22:
         ptr = reg[0]
+        str = ''
         while memory[ptr] != 0:
-            print(chr(memory[ptr]), end = '')
+            str += chr(memory[ptr])
             ptr+=1
+        str = bytes(str, "utf-8").decode("unicode_escape")
+        print(str)
 
 op_codes = {
     0b0001: addOp,
@@ -157,10 +160,11 @@ op_codes = {
     0b1111: trapOp
 }
 
-def parse(instruct):
+def parse(instruct, debug):
     op_code = (instruct >> 12) & 0b1111
     if op_code in op_codes:
-        print(op_codes[op_code])
+        if debug:
+            print(op_codes[op_code])
         op_codes[op_code](instruct)
     else:
         print("NOP")
@@ -169,23 +173,26 @@ def loadIn():
     for ad, bina in lc3asm.out.items():
         memory[ad] = bina
 
-def run():
-    global pc
-    # pc = np.uint16(0x3000)
-    while run:
-        c = input("\n>")
+def run(debug = True):
+    global pc, halt
+    halt = False
+    while not halt:
+        c = input("\n>") if debug else ''
         if c == "r":
             for i in range(0, 8):
-                print("R" + str(i) + " : " + hex(reg[i]))
+                print("R" + str(i) + ":  \t" + hex(reg[i]))
+            print('PSR:\t' + bin(memory[psr]))
+            print('PC: \t' + hex(pc))
         elif c == "p":
             return
         pc+=1
-        print(hex(pc))
-        parse(memory[pc-1])
+        if debug: 
+            print(hex(pc))
+        parse(memory[pc-1], debug)
 
-# pc = 0x3000
-# parse(0b0001000000111111)
-# parse(0b0011000000001110)
-
-# for i in range(0x3006, 0x3010):
-#     print(str(hex(i)) +':'+ str(sign_extend(memory[i], 16)))
+lc3asm.loadFile("OS_vector_tables.asm")
+lc3asm.asm()
+loadIn()
+pc = np.int16(0x200)
+run(debug = False)
+pc = np.int16(0x3000)
