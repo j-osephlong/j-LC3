@@ -6,6 +6,7 @@ import numpy as np
 # file = ['.orig x3000', 'HELLO:',' ADD R1, R1, #5', 'LD R1, ascii','BRnz HELLO',' ADD R1, R1, #5','HALT','ascii: .FILL x30', 'list: .BLKW 4', 'ascii2: .FILL x30', '.END']
 file = ['.orig x3000', 'AND R0, R0, #0', 'ADD R0, R0, #1', 'LD R1, ascii', 'ADD R0, R0, R1', 'OUT', 'HALT', 'ascii: .FILL x30', '.END']
 out = {}
+currentPath = ''
 
 symTable = {}
 pc = np.int16(0)
@@ -28,7 +29,7 @@ def moveSign(num, bits):
 def origPsOp (instruct):
     global pc
     pc = parseNum(instruct[1])
-    print("PC assigned as " + str(hex(pc)))
+    print("[LC3asm.py] PC assigned as " + str(hex(pc)))
 
 def fillPsOp (instruct):
     global pc
@@ -41,8 +42,7 @@ def blkwPsOp (instruct):
 
 def stringzOp (instruct):
     global pc
-    print(instruct)
-    for c in instruct[1:-1]:
+    for c in bytes(instruct[1:-1], "utf-8").decode("unicode_escape"):
         out[pc] = ord(c)
         pc+=1
     
@@ -87,7 +87,7 @@ def brOp (instruct):
     if 'p' in instruct[0]:
         bina |= 1<<9
     if instruct[1] not in symTable:
-        print('Undeclared label in branch.')
+        print('[LC3asm.py] Undeclared label in branch.')
         return -1
     else:
         bina|=moveSign(symTable[instruct[1]] - pc, 9)&0b111111111
@@ -103,7 +103,7 @@ def jsrOp (instruct):
     if instruct[1][0] != 'R':
         bina |= 1<<11
         if instruct[1] not in symTable:
-            print('Undeclared label in jsr.')
+            print('[LC3asm.py] Undeclared label in jsr.')
             return -1
         else:
             bina |= moveSign(symTable[instruct[1]] - pc, 11)&0b11111111111
@@ -115,7 +115,7 @@ def ldOp (instruct):
     bina = 0b0010000000000000
     bina |= int(instruct[1][1])<<9
     if instruct[2] not in symTable:
-        print('Undeclared label in ld.')
+        print('[LC3asm.py] Undeclared label in ld.')
         return -1
     else:
         bina |= moveSign(symTable[instruct[2]] - pc, 9)&0b111111111
@@ -125,7 +125,7 @@ def ldiOp (instruct):
     bina = 0b1010000000000000
     bina |= int(instruct[1][1])<<9
     if instruct[2] not in symTable:
-        print('Undeclared label in ld.')
+        print('[LC3asm.py] Undeclared label in ld.')
         return -1
     else:
         bina |= moveSign(symTable[instruct[2]] - pc, 9)&0b111111111
@@ -161,7 +161,7 @@ def stOp (instruct):
     bina = 0b0011000000000000
     bina |= int(instruct[1][1])<<9
     if instruct[2] not in symTable:
-        print('Undeclared label in st.')
+        print('[LC3asm.py] Undeclared label in st.')
         return -1
     else:
         bina |= moveSign(symTable[instruct[2]] - pc, 9)&0b111111111
@@ -171,7 +171,7 @@ def stiOp (instruct):
     bina = 0b1011000000000000
     bina |= int(instruct[1][1])<<9
     if instruct[2] not in symTable:
-        print('Undeclared label in st.')
+        print('[LC3asm.py] Undeclared label in st.')
         return -1
     else:
         bina |= moveSign(symTable[instruct[2]] - pc, 9)&0b111111111
@@ -231,7 +231,8 @@ trapPs_ops = {
 }
 
 def loadFile(path):
-    global file
+    global file, currentPath
+    currentPath = path.partition('.')[0]
     f = open(path, "r")
     f = f.read()
     file = f.splitlines()
@@ -250,12 +251,12 @@ def firstPass():
             if len(instruct[0]) <= 20:
                 #label
                 symTable[instruct[0][:-1]] = pc
-                print("Label " + instruct[0][:-1] + " defined at " + str(hex(pc)))
+                print("[LC3asm.py] Label " + instruct[0][:-1] + " defined at " + str(hex(pc)))
                 instruct = instruct[1:]
                 if len(instruct) == 0:
                     continue
             else:
-                print("Label " + instruct[0][:-1] + " at " + str(hex(pc)) + " invalid.")
+                print("[LC3asm.py] Label " + instruct[0][:-1] + " at " + str(hex(pc)) + " invalid.")
                 return -1
             
         if instruct[0].lower() not in op_codes:
@@ -278,6 +279,9 @@ def firstPass():
 
 def secondPass():
     global pc
+
+    lstFile = open(currentPath+".lst", 'w')
+    lstFile.write("PC\t\tHEX\t\tSOURCE\n")
     for l in file:
         instruct = l.partition(';')[0]
         instruct = instruct.split(',')
@@ -304,7 +308,7 @@ def secondPass():
                     pc+=1 
                     out[pc-1] = op_codes['br'](instruct)
                     continue
-                print("Invalid operands " + l + " at " + str(hex(pc)))
+                print("[LC3asm.py] Invalid operands " + l + " at " + str(hex(pc)))
                 return -1
             else:
                 if instruct[0].lower() == '.stringz':
@@ -314,20 +318,15 @@ def secondPass():
         else:
             pc+=1 
             out[pc-1] = op_codes[instruct[0].lower()](instruct)
+        if pc-1 in out:
+            lstFile.write(format(pc-1, '#06X')[2:] + "\t" + format(out[pc-1], '#06X')[2:] + "\t" + l + "\n")
+        else:
+            lstFile.write("\t\t\t\t" + l + "\n")
 
 
 def asm():
-    print("Pass #1 failed.") if firstPass() == -1 else print("Pass #1 complete.")
-    print("Pass #2 failed.") if secondPass() == -1 else print("Pass #2 complete.")
-
-#pasre func
-    #a = instruct.split ','
-    #a = a[0].split ' ' + a[1:]
-    #a = [c.strip ' ' for c in a]
-
-    #parse / remove label
-
-    #parse instruct, assemble
+    print("[LC3asm.py] Pass #1 failed.") if firstPass() == -1 else print("[LC3asm.py] Pass #1 complete.")
+    print("[LC3asm.py] Pass #2 failed.") if secondPass() == -1 else print("[LC3asm.py] Pass #2 complete.")
 
 def printOut():
     for k,l  in out.items():                  

@@ -113,7 +113,13 @@ def retOp(instruct):
     pc = reg[7]
 
 def rtiOp(instruct):
-    pass
+    global pc, reg
+    reg[6]+=2
+    memory[psr] = memory[reg[6]-1]
+    pc = memory[reg[6]-2]
+    # print("PSR popped: " + hex(memory[reg[6]-1]))
+    # print("PC popped: " + hex(memory[reg[6]-2]))
+    # print("SysS:"+hex(reg[6]))
 
 def stOp(instruct):
     ans = reg[(instruct>>9)&0b111]
@@ -134,12 +140,43 @@ def trapOp(instruct):
         halt = True
     if instruct&0b11111111 == 0x22:
         ptr = reg[0]
-        str = ''
         while memory[ptr] != 0:
-            str += chr(memory[ptr])
+            print(chr(memory[ptr]), end='')
             ptr+=1
-        str = bytes(str, "utf-8").decode("unicode_escape")
-        print(str)
+
+def rTrap(instruct):
+    global pc, reg
+    # print("rTrap " + hex(instruct))
+    if memory[psr]&0x8000 == 0x8000:
+        #set OS_SP
+        reg[6] = memory[lc3asm.symTable['OS_SP']]
+    #push PSR and PC
+
+    #if in user mode, set OS_SP
+    #change to super mode
+
+
+    reg[6]-=2
+    memory[reg[6]+1] = memory[psr]
+    memory[reg[6]] = pc
+    pc = np.int16(memory[instruct&0b11111111])
+
+    if memory[psr]&0x8000 == 0x8000:
+        #goto super mode
+        memory[psr]&=0x7FFF
+
+    # print("PSR pushed: " + hex(memory[reg[6]-1]))
+    # print("PC pushed: " + hex(memory[reg[6]]))
+    # print("SysS:"+hex(reg[6]))
+
+def display():
+    if memory[ddr_ptr] != 0:
+        memory[dsr_ptr]&=0x7FFF
+        print(chr(memory[ddr_ptr]&0xFF), end='')
+        memory[ddr_ptr] = 0
+        memory[dsr_ptr]|=0x8000
+    else:
+        memory[dsr_ptr]|=0x8000
 
 op_codes = {
     0b0001: addOp,
@@ -165,7 +202,10 @@ def parse(instruct, debug):
     if op_code in op_codes:
         if debug:
             print(op_codes[op_code])
-        op_codes[op_code](instruct)
+        if instruct == 0xF025 or instruct == 0xF021 or instruct == 0xF022:
+            rTrap(instruct)
+        else:
+            op_codes[op_code](instruct)
     else:
         print("NOP")
 
@@ -174,25 +214,36 @@ def loadIn():
         memory[ad] = bina
 
 def run(debug = True):
-    global pc, halt
+    global pc, halt, memory
     halt = False
-    while not halt:
+    memory[mcr_ptr] = 0b1000000000000000
+    while memory[mcr_ptr] == 0b1000000000000000:
+        pc+=1
+        if debug: 
+            print(hex(pc))
+        parse(memory[pc-1], debug)
+        display()
         c = input("\n>") if debug else ''
         if c == "r":
             for i in range(0, 8):
                 print("R" + str(i) + ":  \t" + hex(reg[i]))
             print('PSR:\t' + bin(memory[psr]))
+            print('MCR:\t' + bin(memory[mcr_ptr]))
             print('PC: \t' + hex(pc))
         elif c == "p":
             return
-        pc+=1
-        if debug: 
-            print(hex(pc))
-        parse(memory[pc-1], debug)
+        elif c == "ss":
+            print("----------------")
+            for i in range(reg[6], 0x3000):
+                print(hex(i) + ":\t"+hex(memory[i]))
+                print("----------------")
 
+print("[LC3.py] Assembling LC3 OS")
 lc3asm.loadFile("OS_vector_tables.asm")
 lc3asm.asm()
 loadIn()
 pc = np.int16(0x200)
+memory[psr] &=0x7FFF #set supervisor mode
+print("[LC3.py] Starting LC3 OS")
 run(debug = False)
-pc = np.int16(0x3000)
+# pc = np.int16(0x3000)

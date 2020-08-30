@@ -641,7 +641,7 @@ TRAP_HALT:
     LD R1, MASK_HI
     AND R0, R0, R1
     STI R0, OS_MCR
-    BRnzp TRAP_HALT        ; HALT again...
+    RTI     ; HALT again...
     ; print an error message, then HALT
 BAD_TRAP:
     LEA R0, BAD_TRAP_MSG   ; give an error message
